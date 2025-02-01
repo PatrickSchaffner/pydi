@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "build"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydi"
+authors = [
+  {name = "Patrick Schaffner", email = "patrick.schaffner@protonmail.ch"},
+]
+maintainers = [
+  {name = "Patrick Schaffner", email = "patrick.schaffner@protonmail.ch"},
+]
+description = "A dependency injection framework for python."
+readme = "README.md"
+license = {text = "MIT License"}
+keywords = ["cdi", "ioc", "dependency", "injection"]
+requires-python = ">=3.10"
+dependencies = [
+    "makefun",
+]
+optional-dependencies.test = [
+    "pytest",
+    "pytest-cov",
+]
+dynamic = ["version"]
+
+[project.urls]
+Source = "https://github.com/PatrickSchaffner/PyDI"
+
+[tool.setuptools.dynamic]
+version = {attr = "pydi.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pydi"]
+namespaces = false
+
+[tool.pytest.ini_options]
+addopts = "--cov=pydi --junitxml=junit.xml --cov-report=xml --cov-report=html"
+testpaths = ["tests"]
