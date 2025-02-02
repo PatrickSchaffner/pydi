@@ -112,7 +112,10 @@ def inject(*types, **qualifiers):
     if len(types) > 1:
         raise ValueError("Cannot inject more than one type per parameter.")
     if len(types) == 1:
-        return Annotated[types[0], inject, compile_qualifiers(qualifiers)]
+        if len(qualifiers) > 0:
+            return Annotated[types[0], inject, compile_qualifiers(qualifiers)]
+        else:
+            return Annotated[types[0], inject]
 
     if len(qualifiers) > 0:
         raise ValueError('Cannot specify qualifiers for inject decorator.')
