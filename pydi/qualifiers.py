@@ -24,7 +24,7 @@ class Qualifiers(object):
         return ','.join(self._args + tuple('='.join(kw) for kw in self._sorted_kwargs))
 
     def __getitem__(self, key):
-        if key in self._args:
+        if key not in self._kwargs and key in self._args:
             return None
         return self._kwargs[key]
 
