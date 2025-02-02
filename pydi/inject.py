@@ -43,7 +43,6 @@ class ComponentDescriptor(object):
         return issubclass(_get_origin(this), _get_origin(other))
 
 
-
 class Context:
 
     def __init__(self):
@@ -71,7 +70,7 @@ class Context:
         components = [comp for comp in self._singletons.keys() if comp.satisfies(request)]
         if many:
             if named:
-                instances = {comp['name']: self._singletons[comp]() for comp in components if 'name' in comp}
+                instances = {comp.qualifiers['name']: self._singletons[comp]() for comp in components if 'name' in comp.qualifiers}
             else:
                 instances = (self._singletons[comp]() for comp in components)
             return instances

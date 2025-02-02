@@ -34,17 +34,17 @@ class Qualifiers(object):
         if not isinstance(other, Qualifiers):
             return False
         idx_args: int = 0
-        for arg in self._args:
-            while idx_args < len(other._args) and other._args[idx_args] < arg:
+        for arg in other._args:
+            while idx_args < len(self._args) and self._args[idx_args] < arg:
                 idx_args += 1
-            if idx_args >= len(other._args) or arg != other._args[idx_args]:
+            if idx_args >= len(self._args) or arg != self._args[idx_args]:
                 return False
             idx_args += 1
         idx_args = 0
-        for kwarg in self._sorted_kwargs:
-            while idx_args < len(other._sorted_kwargs) and other._sorted_kwargs[idx_args][0] < kwarg[0]:
+        for kwarg in other._sorted_kwargs:
+            while idx_args < len(self._sorted_kwargs) and self._sorted_kwargs[idx_args][0] < kwarg[0]:
                 idx_args += 1
-            if idx_args >= len(other._sorted_kwargs) or kwarg != other._sorted_kwargs[idx_args]:
+            if idx_args >= len(self._sorted_kwargs) or kwarg != self._sorted_kwargs[idx_args]:
                 return False
             idx_args += 1
         return True

@@ -46,7 +46,11 @@ def home() -> WindowsPath:
 
 
 @inject()
-def main(h: inject(Path), **floats: inject(float, group='output')):
+def main(h: inject(Path),
+         x: inject(int, name='x'),
+         **floats: inject(float, group='output'),
+         ) -> None:
+    print(f"x: {x}")
     for variable, value in floats.items():
         print(f"{variable}: {value}")
     print(h)
@@ -54,4 +58,3 @@ def main(h: inject(Path), **floats: inject(float, group='output')):
 
 if __name__ == '__main__':
     main()
-    print(issubclass(WindowsPath, Path))
