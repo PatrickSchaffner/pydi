@@ -60,14 +60,15 @@ class Injector:
         merged_args = list()
         merged_kwargs = dict()
 
-        def _is_next(kind) -> bool:
+        def _param_kind_is(kind) -> bool:
             if param_idx >= len(self._parameters):
                 return False
             if not isinstance(kind, set):
                 kind = {kind}
             return self._parameters[param_idx].kind in kind
 
-        while _is_next(Parameter.POSITIONAL_ONLY):
+        # Fill positional-only paramenters.
+        while _param_kind_is(Parameter.POSITIONAL_ONLY):
             param = self._parameters[param_idx]
             if param in self._injects:
                 merged_args.append(context.resolve(self._injects[param]))
@@ -78,7 +79,8 @@ class Injector:
                 arg_idx += 1
             param_idx += 1
 
-        while _is_next(Parameter.POSITIONAL_OR_KEYWORD):
+        # Fill positional-or-keyword parameters being used as positionals.
+        while _param_kind_is(Parameter.POSITIONAL_OR_KEYWORD):
             param = self._parameters[param_idx]
             if param in self._injects:
                 merged_args.append(context.resolve(self._injects[param]))
@@ -91,7 +93,8 @@ class Injector:
                 arg_idx += 1
             param_idx += 1
 
-        while _is_next(Parameter.VAR_POSITIONAL):
+        # Fill variable-length positional parameters.
+        while _param_kind_is(Parameter.VAR_POSITIONAL):
             if param in self._injects:
                 merged_args.extend(context.resolve(self._injects[param], all=True))
             else:
@@ -99,7 +102,8 @@ class Injector:
                 arg_idx = len(args)
             param_idx += 1
 
-        while _is_next({Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY}):
+        # Fill keyword-only parameters.
+        while _param_kind_is({Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY}):
             param = self._parameters[param_idx]
             if param in self._injects:
                 if param.name in kwargs:
@@ -112,7 +116,8 @@ class Injector:
                 pass
             param_idx += 1
 
-        while _is_next(Parameter.VAR_KEYWORD):
+        # Fill variable-length keyword parameters.
+        while _param_kind_is(Parameter.VAR_KEYWORD):
             if param in self._injects:
                 merged_kwargs.update(context.resolve(self._injects[param], all=True, named=True))
             else:
