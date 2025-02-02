@@ -7,26 +7,52 @@ from makefun import wraps
 class Context:
 
     def __init__(self):
-        self._singletons : dict[type,object] = dict()
+        self._singletons: dict[type, object] = dict()
 
     def register(self,
-                 target : type,
-                 component : object,
+                 target: type,
+                 component: object,
                  ):
         if target in self._singletons:
             raise ValueError(f"Cannot register multiple components for '{target}'")
         self._singletons[target] = component
 
     def resolve(self,
-                target : type,
-                all : bool = False,
-                named : bool = False,
+                target: type,
+                all: bool = False,
+                named: bool = False,
                 ):
         if all or named:
             raise NotImplementedError("Not implemented yet.")
         if target in self._singletons:
-            return self._singletons[target]
+            return self._singletons[target]()
         raise ValueError(f"Cannot resolve dependency '{target}'.")
+
+
+def provides(ctx: Context, /, target: type | None = None, **qualifiers):
+    def _decorator(func):
+        nonlocal target
+        if target is None:
+            target = signature(func).return_annotation
+        ctx.register(target, func)
+        return func
+    return _decorator
+
+
+def singleton():
+    def _decorator(func):
+        instance = None
+
+        @wraps(func)
+        def _wrapper(*args, **kwargs):
+            nonlocal instance
+            if instance is None:
+                instance = func(*args, **kwargs)
+            return instance
+
+        return _wrapper
+    return _decorator
+
 
 
 def inject(context: Context):
@@ -98,8 +124,9 @@ class Injector:
             if param in self._injects:
                 merged_args.extend(context.resolve(self._injects[param], all=True))
             else:
-                merged_args.extend(args[arg_idx:])
-                arg_idx = len(args)
+                remaining = args[arg_idx:]
+                merged_args.extend(remaining)
+                arg_idx += len(remaining)
             param_idx += 1
 
         # Fill keyword-only parameters.
@@ -121,8 +148,12 @@ class Injector:
             if param in self._injects:
                 merged_kwargs.update(context.resolve(self._injects[param], all=True, named=True))
             else:
-                merged_kwargs.update(kwargs)
-                kwargs.clear()
+                for key in list(kwargs.keys()):
+                    merged_kwargs[key] = kwargs[key]
+                    del kwargs[key]
             param_idx += 1
+
+        assert arg_idx == len(args)
+        assert len(kwargs) == 0
 
         return tuple(merged_args), merged_kwargs
