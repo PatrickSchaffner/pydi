@@ -1,4 +1,5 @@
 from typing import Annotated, Callable
+from pathlib import Path, WindowsPath
 
 from pydi import inject, singleton, provides, qualifiers
 
@@ -39,11 +40,18 @@ def calculate_f_using_func(func: inject(Callable[[int, float, float], float])) -
     return func(1, w=1, v=1)
 
 
+@provides()
+def home() -> WindowsPath:
+    return Path.home()
+
+
 @inject()
-def main(**floats: inject(float, group='output')):
+def main(h: inject(Path), **floats: inject(float, group='output')):
     for variable, value in floats.items():
         print(f"{variable}: {value}")
+    print(h)
 
 
 if __name__ == '__main__':
     main()
+    print(issubclass(WindowsPath, Path))

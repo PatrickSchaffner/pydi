@@ -1,14 +1,16 @@
 from inspect import Parameter, signature
-from typing import Callable, Dict, Tuple, Any, get_args, Annotated
+from typing import Callable, Dict, Tuple, Any, get_args, get_origin, Annotated
 
 from makefun import wraps
+
+from .qualifiers import Qualifiers
 
 
 class ComponentDescriptor(object):
 
-    def __init__(self, target: type, qualifiers: dict[str, str]):
+    def __init__(self, target: type, qualifiers: Qualifiers):
         self._target: type = target
-        self._qualifiers: dict[str, str] = qualifiers
+        self._qualifiers: Qualifiers = qualifiers
 
     @property
     def target(self):
@@ -19,24 +21,27 @@ class ComponentDescriptor(object):
         return self._qualifiers
 
     def __hash__(self):
-        h = 103 + hash(self.target)
-        for key, value in sorted(self.qualifiers.items()):
-            h = h ^ hash(key) ^ hash(value)
-        return h
+        return (103 + hash(self.target)) ^ hash(self.qualifiers)
 
     def __eq__(self, other):
+        if self is other:
+            return True
         if not isinstance(other, ComponentDescriptor):
             return False
-        if self.target != other.target:
-            return False
-        s = self.qualifiers
-        o = other.qualifiers
-        return len(s) == len(o) \
-            and set(s.keys()) == set(o.keys()) \
-            and all(s_i == o_i for s_i, o_i in zip(sorted(s.items()), sorted(o.items())))
+        return self.target == other.target and self.qualifiers == other.qualifiers
 
     def __str__(self):
-        return f"{self.target}:{compile_qualifiers(self.qualifiers)}"
+        return f"{self.target.__module__}.{self.target.__qualname__}[{str(self.qualifiers)}]"
+
+    def satisfies(self, other):
+        return self._issubclass(self.target, other.target) and other.qualifiers in self.qualifiers
+
+    @classmethod
+    def _issubclass(cls, this, other):
+        def _get_origin(x):
+            return get_origin(x) if hasattr(x, '__origin__') else x
+        return issubclass(_get_origin(this), _get_origin(other))
+
 
 
 class Context:
@@ -47,7 +52,7 @@ class Context:
     def register(self,
                  target: type,
                  factory: object,
-                 qualifiers: dict[ComponentDescriptor, str] = dict(),
+                 qualifiers: Qualifiers = Qualifiers(),
                  ):
         descriptor = ComponentDescriptor(target, qualifiers)
         if descriptor in self._singletons:
@@ -56,26 +61,27 @@ class Context:
 
     def resolve(self,
                 target: type,
-                qualifiers: dict[str, str] = dict(),
+                qualifiers: Qualifiers = Qualifiers(),
                 *,
                 many: bool = False,
                 named: bool = False,
                 ):
+
+        request = ComponentDescriptor(target, qualifiers)
+        components = [comp for comp in self._singletons.keys() if comp.satisfies(request)]
         if many:
-            descriptors = [d for d in self._singletons.keys() if d.target == target
-                           and all(k in d.qualifiers and v == d.qualifiers[k] for k, v in qualifiers.items())]
             if named:
-                components = {d.qualifiers['name']: self._singletons[d]() for d in descriptors if 'name' in d.qualifiers}
+                instances = {comp['name']: self._singletons[comp]() for comp in components if 'name' in comp}
             else:
-                components = [self._singletons[d]() for d in descriptors]
-            return components
+                instances = (self._singletons[comp]() for comp in components)
+            return instances
         elif named:
             raise ValueError("Parameter 'named=True' can only be used with 'many=True'.")
-
-        descriptor = ComponentDescriptor(target, qualifiers)
-        if descriptor in self._singletons:
-            return self._singletons[descriptor]()
-        raise ValueError(f"Cannot resolve dependency '{descriptor}'.")
+        elif len(components) == 0:
+            raise ValueError(f'Cannot resolve dependency {request}.')
+        elif len(components) > 1:
+            raise ValueError(f'Dependency resolution for {request} is ambiguous: {" | ".join(str(c) for c in components)}')
+        return self._singletons[components[0]]()
 
 
 ctx = Context()
@@ -98,7 +104,7 @@ def provides(target: type | None = None, *, function: bool = False, **qualifiers
             if target is None:
                 target = signature(func).return_annotation
             factory = func
-        ctx.register(target, factory, qualifiers)
+        ctx.register(target, factory, Qualifiers(**qualifiers))
         return func
     return _decorator
 
@@ -123,7 +129,7 @@ def inject(*types, **qualifiers):
         raise ValueError("Cannot inject more than one type per parameter.")
     if len(types) == 1:
         if len(qualifiers) > 0:
-            return Annotated[types[0], inject, compile_qualifiers(qualifiers)]
+            return Annotated[types[0], inject, Qualifiers(**qualifiers)]
         else:
             return Annotated[types[0], inject]
 
@@ -170,7 +176,7 @@ class Injector:
     def _parse_inject(cls, parameter: Parameter) -> tuple[type, dict[str, str]]:
         args = get_args(parameter.annotation)
         t = args[0]
-        q = parse_qualifiers(args[2]) if len(args) >= 3 else dict()
+        q = args[2] if len(args) >= 3 else Qualifiers()
         return t, q
 
     def __init__(self, injection_point: Callable, /):
