@@ -1,9 +1,7 @@
-import inspect
+from inspect import Parameter, signature
+from typing import Callable, Dict, Tuple, Any, get_args
 
 from makefun import wraps
-
-
-
 
 
 class Context:
@@ -21,24 +19,105 @@ class Context:
 
     def resolve(self,
                 target : type,
+                all : bool = False,
+                named : bool = False,
                 ):
+        if all or named:
+            raise NotImplementedError("Not implemented yet.")
         if target in self._singletons:
             return self._singletons[target]
         raise ValueError(f"Cannot resolve dependency '{target}'.")
 
 
-
-def inject(context : Context):
+def inject(context: Context):
     def _decorator(target):
-        sig = inspect.signature(target)
-        for (idx, (varname, parameter)) in enumerate(sig.parameters.items()):
-            ann = parameter.annotation
-            print(idx, parameter.kind, parameter.name, parameter.annotation)
-            if not hasattr(ann, '__metadata__') or inject not in ann.__metadata__:
-                continue
-            print(ann.__metadata__[0])
-        @wraps(target, remove_args='x')
+        injector = Injector(target)
+
+        @wraps(target, remove_args=injector.injected_params)
         def _wrapper(*args, **kwargs):
-            return target(context.resolve(int), *args, **kwargs)
+            args, kwargs = injector.inject_args(context, args, kwargs)
+            return target(*args, **kwargs)
+
         return _wrapper
     return _decorator
+
+
+class Injector:
+
+    def __init__(self, injection_point: Callable, /):
+        self._parameters = [p for p in signature(injection_point).parameters.values()]
+        self._injects = {p: get_args(p.annotation)[0] for p in self._parameters
+                         if hasattr(p.annotation, '__metadata__') and inject in p.annotation.__metadata__}
+
+    @property
+    def injected_params(self):
+        return set(p.name for p in self._injects.keys())
+
+    def inject_args(self, context: Context, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[Tuple[Any], Dict[str, Any]]:
+        kwargs = kwargs.copy()
+        param_idx = 0
+        arg_idx = 0
+        merged_args = list()
+        merged_kwargs = dict()
+
+        def _is_next(kind) -> bool:
+            if param_idx >= len(self._parameters):
+                return False
+            if not isinstance(kind, set):
+                kind = {kind}
+            return self._parameters[param_idx].kind in kind
+
+        while _is_next(Parameter.POSITIONAL_ONLY):
+            param = self._parameters[param_idx]
+            if param in self._injects:
+                merged_args.append(context.resolve(self._injects[param]))
+            else:
+                if arg_idx >= len(args):
+                    raise ValueError("Not enough positional arguments.")
+                merged_args.append(args[arg_idx])
+                arg_idx += 1
+            param_idx += 1
+
+        while _is_next(Parameter.POSITIONAL_OR_KEYWORD):
+            param = self._parameters[param_idx]
+            if param in self._injects:
+                merged_args.append(context.resolve(self._injects[param]))
+            elif arg_idx >= len(args):
+                break
+            else:
+                if param.name in kwargs:
+                    raise ValueError("Cannot provide argument twice.")
+                merged_args.append(args[arg_idx])
+                arg_idx += 1
+            param_idx += 1
+
+        while _is_next(Parameter.VAR_POSITIONAL):
+            if param in self._injects:
+                merged_args.extend(context.resolve(self._injects[param], all=True))
+            else:
+                merged_args.extend(args[arg_idx:])
+                arg_idx = len(args)
+            param_idx += 1
+
+        while _is_next({Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY}):
+            param = self._parameters[param_idx]
+            if param in self._injects:
+                if param.name in kwargs:
+                    raise ValueError("Cannot provide argument twice.")
+                merged_kwargs[param.name] = context.resolve(self._injects[param])
+            elif param.name in kwargs:
+                merged_kwargs[param.name] = kwargs[param.name]
+                del kwargs[param.name]
+            else:
+                pass
+            param_idx += 1
+
+        while _is_next(Parameter.VAR_KEYWORD):
+            if param in self._injects:
+                merged_kwargs.update(context.resolve(self._injects[param], all=True, named=True))
+            else:
+                merged_kwargs.update(kwargs)
+                kwargs.clear()
+            param_idx += 1
+
+        return tuple(merged_args), merged_kwargs

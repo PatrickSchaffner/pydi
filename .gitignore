@@ -4,4 +4,7 @@ __pycache__
 .venv
 /build
 *.egg-info
+.coverage
+coverage.xml
+junit.xml
 
