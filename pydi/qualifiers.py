@@ -24,14 +24,14 @@ class Qualifiers(object):
         return ','.join(self._args + tuple('='.join(kw) for kw in self._sorted_kwargs))
 
     def __getitem__(self, key):
+        if key in self._args:
+            return None
         return self._kwargs[key]
 
-    def __contains__(self, other):
+    def contain(self, other: 'Qualifiers'):
         if self is other:
             return True
-        if isinstance(other, str):
-            return other in self._args or other in self._kwargs
-        if not isinstance(other, Qualifiers):
+        if len(self._args) < len(other._args) or len(self._sorted_kwargs) < len(other._sorted_kwargs):
             return False
         idx_args: int = 0
         for arg in other._args:
@@ -48,6 +48,9 @@ class Qualifiers(object):
                 return False
             idx_args += 1
         return True
+
+    def __contains__(self, qualifier: str):
+        return qualifier in self._args or qualifier in self._kwargs
 
 
 def qualifiers(*args, **kwargs) -> Qualifiers:

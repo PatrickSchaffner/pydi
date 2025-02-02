@@ -34,7 +34,7 @@ class ComponentDescriptor(object):
         return f"{self.target.__module__}.{self.target.__qualname__}[{str(self.qualifiers)}]"
 
     def satisfies(self, other):
-        return self._issubclass(self.target, other.target) and other.qualifiers in self.qualifiers
+        return self._issubclass(self.target, other.target) and self.qualifiers.contain(other.qualifiers)
 
     @classmethod
     def _issubclass(cls, this, other):
