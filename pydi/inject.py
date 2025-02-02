@@ -36,7 +36,7 @@ class ComponentDescriptor(object):
             and all(s_i == o_i for s_i, o_i in zip(sorted(s.items()), sorted(o.items())))
 
     def __str__(self):
-        return f"{self.target:str}:{compile_qualifiers(self.qualifiers)}"
+        return f"{self.target}:{compile_qualifiers(self.qualifiers)}"
 
 
 class Context:
@@ -47,7 +47,7 @@ class Context:
     def register(self,
                  target: type,
                  factory: object,
-                 qualifiers: dict[str, str] = dict(),
+                 qualifiers: dict[ComponentDescriptor, str] = dict(),
                  ):
         descriptor = ComponentDescriptor(target, qualifiers)
         if descriptor in self._singletons:
@@ -58,10 +58,20 @@ class Context:
                 target: type,
                 qualifiers: dict[str, str] = dict(),
                 *,
-                all: bool = False,
+                many: bool = False,
+                named: bool = False,
                 ):
-        if all:
-            raise NotImplementedError("Not implemented yet.")
+        if many:
+            descriptors = [d for d in self._singletons.keys() if d.target == target
+                           and all(k in d.qualifiers and v == d.qualifiers[k] for k, v in qualifiers.items())]
+            if named:
+                components = {d.qualifiers['name']: self._singletons[d]() for d in descriptors if 'name' in d.qualifiers}
+            else:
+                components = [self._singletons[d]() for d in descriptors]
+            return components
+        elif named:
+            raise ValueError("Parameter 'named=True' can only be used with 'many=True'.")
+
         descriptor = ComponentDescriptor(target, qualifiers)
         if descriptor in self._singletons:
             return self._singletons[descriptor]()
@@ -214,8 +224,9 @@ class Injector:
 
         # Fill variable-length positional parameters.
         while _param_kind_is(Parameter.VAR_POSITIONAL):
+            param = self._parameters[param_idx]
             if param in self._injects:
-                merged_args.extend(context.resolve(*self._injects[param], all=True))
+                merged_args.extend(context.resolve(*self._injects[param], many=True))
             else:
                 remaining = args[arg_idx:]
                 merged_args.extend(remaining)
@@ -238,8 +249,9 @@ class Injector:
 
         # Fill variable-length keyword parameters.
         while _param_kind_is(Parameter.VAR_KEYWORD):
+            param = self._parameters[param_idx]
             if param in self._injects:
-                merged_kwargs.update(context.resolve(*self._injects[param], all=True, named=True))
+                merged_kwargs.update(context.resolve(*self._injects[param], many=True, named=True))
             else:
                 for key in list(kwargs.keys()):
                     merged_kwargs[key] = kwargs[key]

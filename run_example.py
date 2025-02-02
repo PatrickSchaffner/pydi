@@ -1,11 +1,17 @@
 from typing import Annotated, Callable
-from pydi.inject import inject, singleton, provides, qualifiers
+
+from pydi import inject, singleton, provides, qualifiers
 
 
 @provides(name='y')
-@singleton()
 def get_y() -> float:
     return 5
+
+
+@provides(name='y2', group='output')
+@inject()
+def twice_y(y: inject(float, name='y')) -> float:
+    return 2 * y
 
 
 @provides(name='x')
@@ -26,18 +32,18 @@ def func(x: Annotated[int, inject, qualifiers(name='x')],
     return x * y * z * w * v
 
 
-@provides(name='f')
+@provides(name='f', group='output')
+@singleton()
 @inject()
-def calculate(f: Annotated[Callable[[int, float, float], float], inject]) -> float:
-    return f(1, w=1, v=1)
+def calculate_f_using_func(func: inject(Callable[[int, float, float], float])) -> float:
+    return func(1, w=1, v=1)
 
 
 @inject()
-def main(f: inject(float, name='f')):
-    print(f)
+def main(**floats: inject(float, group='output')):
+    for variable, value in floats.items():
+        print(f"{variable}: {value}")
 
 
 if __name__ == '__main__':
     main()
-
-
