@@ -1,22 +1,20 @@
-from typing import Annotated
-from pydi.inject import inject, Context, singleton, provides
+from typing import Annotated, Callable
+from pydi.inject import inject, singleton, provides
 
 
-ctx = Context()
-
-
-@provides(ctx)
+@provides()
 @singleton()
 def get_y() -> float:
     return 5
 
 
-@provides(ctx)
+@provides()
 def get_x() -> int:
     return 10
 
 
-@inject(ctx)
+@provides(function=True)
+@inject()
 def func(x: Annotated[int, inject],
          z: int,
          /,
@@ -28,5 +26,12 @@ def func(x: Annotated[int, inject],
     return x * y * z * w * v
 
 
-print(func(1, w=1, v=1))
+@inject()
+def main(f: Annotated[Callable[[int, float, float], float], inject]):
+    print(f(1, w=1, v=1))
+
+
+if __name__ == '__main__':
+    main()
+
 

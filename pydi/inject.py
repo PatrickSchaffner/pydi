@@ -29,12 +29,27 @@ class Context:
         raise ValueError(f"Cannot resolve dependency '{target}'.")
 
 
-def provides(ctx: Context, /, target: type | None = None, **qualifiers):
+ctx = Context()
+
+
+def provides(target: type | None = None, *, function: bool = False, **qualifiers):
+    global ctx
+
     def _decorator(func):
         nonlocal target
-        if target is None:
-            target = signature(func).return_annotation
-        ctx.register(target, func)
+        factory: Callable[[], Any] = None
+        if function:
+            if target is None:
+                sig = signature(func)
+                return_type = sig.return_annotation
+                param_types = [p.annotation for p in sig.parameters.values()]
+                target = Callable[[*param_types], return_type]
+            factory = lambda: func
+        else:
+            if target is None:
+                target = signature(func).return_annotation
+            factory = func
+        ctx.register(target, factory)
         return func
     return _decorator
 
@@ -54,14 +69,14 @@ def singleton():
     return _decorator
 
 
-
-def inject(context: Context):
+def inject():
     def _decorator(target):
         injector = Injector(target)
 
         @wraps(target, remove_args=injector.injected_params)
         def _wrapper(*args, **kwargs):
-            args, kwargs = injector.inject_args(context, args, kwargs)
+            global ctx
+            args, kwargs = injector.inject_args(ctx, args, kwargs)
             return target(*args, **kwargs)
 
         return _wrapper
