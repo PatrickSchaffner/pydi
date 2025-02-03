@@ -17,6 +17,7 @@ keywords = ["cdi", "ioc", "dependency", "injection"]
 requires-python = ">=3.10"
 dependencies = [
     "makefun",
+    "typing_extensions",  # TODO: really needed?
 ]
 optional-dependencies.test = [
     "pytest",

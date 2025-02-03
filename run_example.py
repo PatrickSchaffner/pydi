@@ -1,7 +1,9 @@
-from typing import Annotated, Callable
+from typing import Annotated, Callable, TypeVar
+from typing_extensions import TypeVarTuple, Unpack
 from pathlib import Path, WindowsPath
 
-from pydi import inject, singleton, provides, qualifiers
+from pydi import inject, singleton, provides, qualifiers as q
+from pydi.qualifiers import Qualifiers
 
 
 @provides(name='y')
@@ -20,14 +22,18 @@ def get_x() -> int:
     return 10
 
 
+T = TypeVar('T')
+Inject = Annotated[T, inject]
+
+
 @provides(function=True)
 @inject()
-def func(x: Annotated[int, inject, qualifiers(name='x')],
+def func(x: Inject[int],
          /,
          z: int,
          w: float = 0,
          *,
-         y: inject(float, name='y'),
+         y: Annotated[float, inject, q(name='y')],
          v: float,
          ) -> float:
     return x * y * z * w * v
