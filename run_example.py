@@ -1,9 +1,7 @@
-from typing import Annotated, Callable, TypeVar
-from typing_extensions import TypeVarTuple, Unpack
+from typing import Annotated, Callable
 from pathlib import Path, WindowsPath
 
-from pydi import inject, singleton, provides, qualifiers as q
-from pydi.qualifiers import Qualifiers
+from pydi import inject, singleton, provides, qualifiers as q, Inject
 
 
 @provides(name='y')
@@ -22,10 +20,6 @@ def get_x() -> int:
     return 10
 
 
-T = TypeVar('T')
-Inject = Annotated[T, inject]
-
-
 @provides(function=True)
 @inject()
 def func(x: Inject[int],
@@ -33,7 +27,7 @@ def func(x: Inject[int],
          z: int,
          w: float = 0,
          *,
-         y: Annotated[float, inject, q(name='y')],
+         y: Annotated[float, q(name='y')],
          v: float,
          ) -> float:
     return x * y * z * w * v
@@ -42,7 +36,7 @@ def func(x: Inject[int],
 @provides(name='f', group='output')
 @singleton()
 @inject()
-def calculate_f_using_func(func: inject(Callable[[int, float, float], float])) -> float:
+def calculate_f_using_func(func: Inject[Callable[[int, float, float], float]]) -> float:
     return func(1, w=1, v=1)
 
 
@@ -52,8 +46,8 @@ def home() -> WindowsPath:
 
 
 @inject()
-def main(h: inject(Path),
-         x: inject(int, name='x'),
+def main(h: Inject[Path],
+         x: Annotated[int, q(name='x')],
          **floats: inject(float, group='output'),
          ) -> None:
     print(f"x: {x}")

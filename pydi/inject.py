@@ -1,9 +1,12 @@
 from inspect import Parameter, signature
-from typing import Callable, Dict, Tuple, Any, get_args, get_origin, Annotated
+from typing import Callable, Dict, Tuple, Any, get_args, get_origin, Annotated, TypeVar
 
 from makefun import wraps
 
 from .qualifiers import Qualifiers
+
+
+Inject = Annotated[TypeVar('T'), Qualifiers()]
 
 
 class ComponentDescriptor(object):
@@ -127,10 +130,7 @@ def inject(*types, **qualifiers):
     if len(types) > 1:
         raise ValueError("Cannot inject more than one type per parameter.")
     if len(types) == 1:
-        if len(qualifiers) > 0:
-            return Annotated[types[0], inject, Qualifiers(**qualifiers)]
-        else:
-            return Annotated[types[0], inject]
+        return Annotated[types[0], Qualifiers(**qualifiers)]
 
     if len(qualifiers) > 0:
         raise ValueError('Cannot specify qualifiers for inject decorator.')
@@ -172,16 +172,26 @@ def parse_qualifiers(qualifiers: str):
 class Injector:
 
     @classmethod
+    def _is_injection_point(cls, parameter: Parameter) -> bool:
+        return hasattr(parameter.annotation, '__metadata__') and \
+               any(isinstance(m, Qualifiers) or m == inject for m in parameter.annotation.__metadata__)
+
+    @classmethod
     def _parse_inject(cls, parameter: Parameter) -> tuple[type, dict[str, str]]:
         args = get_args(parameter.annotation)
-        t = args[0]
-        q = args[2] if len(args) >= 3 else Qualifiers()
-        return t, q
+        target = args[0]
+        qual = Qualifiers()
+        for q in args[1:]:
+            if isinstance(q, Qualifiers):
+                qual = q
+                break
+        #q = args[2] if len(args) >= 3 else Qualifiers()
+        return target, qual
 
     def __init__(self, injection_point: Callable, /):
         self._parameters = [p for p in signature(injection_point).parameters.values()]
         self._injects = {p: self._parse_inject(p) for p in self._parameters
-                         if hasattr(p.annotation, '__metadata__') and inject in p.annotation.__metadata__}
+                         if self._is_injection_point(p)}
 
     @property
     def injected_params(self):
