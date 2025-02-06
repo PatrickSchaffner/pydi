@@ -41,11 +41,7 @@ class Component(Generic[T]):
         return f"{self.target.__module__}.{self.target.__qualname__}[{str(self.qualifiers)}]"
 
     def satisfies(self, request):
-        return self._issubclass(self.target, request.target) and self.qualifiers.contain(request.qualifiers)
+        def _get_origin(x): return get_origin(x) if hasattr(x, '__origin__') else x
+        return issubclass(_get_origin(self.target), _get_origin(request.target)) \
+            and request.qualifiers.is_subset(self.qualifiers)
 
-    @classmethod
-    def _issubclass(cls, child, parent) -> bool:
-        def _get_origin(x):
-            return get_origin(x) if hasattr(x, '__origin__') else x
-
-        return issubclass(_get_origin(child), _get_origin(parent))
