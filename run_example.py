@@ -15,7 +15,7 @@ def twice_y(y: inject(float, name='y')) -> float:
     return 2 * y
 
 
-@provides(name='x')
+@provides()
 def get_x() -> int:
     return 10
 
@@ -47,8 +47,8 @@ def home() -> WindowsPath:
 
 @inject()
 def main(h: Inject[Path],
-         x: Annotated[int, q(name='x')],
-         **floats: inject(float, group='output'),
+         x: Inject[int],
+         **floats: inject(float, 'any'),
          ) -> None:
     print(f"x: {x}")
     for variable, value in floats.items():
@@ -58,3 +58,4 @@ def main(h: Inject[Path],
 
 if __name__ == '__main__':
     main()
+

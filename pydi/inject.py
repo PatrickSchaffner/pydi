@@ -1,136 +1,27 @@
 from inspect import Parameter, signature
-from typing import Callable, Dict, Tuple, Any, get_args, get_origin, Annotated, TypeVar
+from typing import Callable, Dict, Tuple, Any, get_args, Annotated, TypeVar, Generic
 
 from makefun import wraps
 
 from .qualifiers import Qualifiers
+from .component import Component
+from .container import Container
 
 
-Inject = Annotated[TypeVar('T'), Qualifiers()]
+Inject = Annotated[TypeVar('T'), Qualifiers('default', 'any')]
+container = Container(__name__)
+provides = container.provides
 
 
-class ComponentDescriptor(object):
+def inject(target: type = None, *qualifiers, **kw_qualifiers):
+    if target is not None and isinstance(target, str):
+        qualifiers = (target, *qualifiers)
+        target = None
 
-    def __init__(self, target: type, qualifiers: Qualifiers):
-        self._target: type = target
-        self._qualifiers: Qualifiers = qualifiers
-
-    @property
-    def target(self):
-        return self._target
-
-    @property
-    def qualifiers(self):
-        return self._qualifiers
-
-    def __hash__(self):
-        return (103 + hash(self.target)) ^ hash(self.qualifiers)
-
-    def __eq__(self, other):
-        if self is other:
-            return True
-        if not isinstance(other, ComponentDescriptor):
-            return False
-        return self.target == other.target and self.qualifiers == other.qualifiers
-
-    def __str__(self):
-        return f"{self.target.__module__}.{self.target.__qualname__}[{str(self.qualifiers)}]"
-
-    def satisfies(self, other):
-        return self._issubclass(self.target, other.target) and self.qualifiers.contain(other.qualifiers)
-
-    @classmethod
-    def _issubclass(cls, this, other):
-        def _get_origin(x):
-            return get_origin(x) if hasattr(x, '__origin__') else x
-        return issubclass(_get_origin(this), _get_origin(other))
-
-
-class Context:
-
-    def __init__(self):
-        self._singletons: dict[type, object] = dict()
-
-    def register(self,
-                 target: type,
-                 factory: object,
-                 qualifiers: Qualifiers = Qualifiers(),
-                 ):
-        descriptor = ComponentDescriptor(target, qualifiers)
-        if descriptor in self._singletons:
-            raise ValueError(f"Cannot register multiple components for '{descriptor}'")
-        self._singletons[descriptor] = factory
-
-    def resolve(self,
-                target: type,
-                qualifiers: Qualifiers = Qualifiers(),
-                *,
-                many: bool = False,
-                named: bool = False,
-                ):
-
-        request = ComponentDescriptor(target, qualifiers)
-        components = [comp for comp in self._singletons.keys() if comp.satisfies(request)]
-        if many:
-            if named:
-                instances = {comp.qualifiers['name']: self._singletons[comp]() for comp in components if 'name' in comp.qualifiers}
-            else:
-                instances = (self._singletons[comp]() for comp in components)
-            return instances
-        elif named:
-            raise ValueError("Parameter 'named=True' can only be used with 'many=True'.")
-        elif len(components) == 0:
-            raise ValueError(f'Cannot resolve dependency {request}.')
-        elif len(components) > 1:
-            raise ValueError(f'Dependency resolution for {request} is ambiguous: {" | ".join(str(c) for c in components)}')
-        return self._singletons[components[0]]()
-
-
-ctx = Context()
-
-
-def provides(target: type | None = None, *, function: bool = False, **qualifiers):
-    global ctx
-
-    def _decorator(func):
-        nonlocal target
-        factory: Callable[[], Any] = None
-        if function:
-            if target is None:
-                sig = signature(func)
-                return_type = sig.return_annotation
-                param_types = [p.annotation for p in sig.parameters.values()]
-                target = Callable[[*param_types], return_type]
-            factory = lambda: func
-        else:
-            if target is None:
-                target = signature(func).return_annotation
-            factory = func
-        ctx.register(target, factory, Qualifiers(**qualifiers))
-        return func
-    return _decorator
-
-
-def singleton():
-    def _decorator(func):
-        instance = None
-
-        @wraps(func)
-        def _wrapper(*args, **kwargs):
-            nonlocal instance
-            if instance is None:
-                instance = func(*args, **kwargs)
-            return instance
-
-        return _wrapper
-    return _decorator
-
-
-def inject(*types, **qualifiers):
-    if len(types) > 1:
-        raise ValueError("Cannot inject more than one type per parameter.")
-    if len(types) == 1:
-        return Annotated[types[0], Qualifiers(**qualifiers)]
+    if target is not None:
+        if len(qualifiers) == 0 and len(kw_qualifiers) == 0:
+            qualifiers = ('default', 'any')
+        return Annotated[target, Qualifiers(*qualifiers, **kw_qualifiers)]
 
     if len(qualifiers) > 0:
         raise ValueError('Cannot specify qualifiers for inject decorator.')
@@ -140,33 +31,12 @@ def inject(*types, **qualifiers):
 
         @wraps(target, remove_args=injector.injected_params)
         def _wrapper(*args, **kwargs):
-            global ctx
-            args, kwargs = injector.inject_args(ctx, args, kwargs)
+            global container
+            args, kwargs = injector.inject_args(container, args, kwargs)
             return target(*args, **kwargs)
 
         return _wrapper
     return _decorator
-
-
-QUALIFIERS_PREFIX = 'qualifiers:'
-
-
-def qualifiers(**q: str):
-    return compile_qualifiers(q)
-
-
-def compile_qualifiers(qualifiers: dict[str, str]):
-    qualifiers = [f'{key}={value}' for (key, value) in sorted(qualifiers.items())]
-    qualifiers = f"{QUALIFIERS_PREFIX}{','.join(qualifiers)}"
-    return qualifiers
-
-
-def parse_qualifiers(qualifiers: str):
-    if not qualifiers.startswith(QUALIFIERS_PREFIX):
-        raise ValueError(f"Qualifier string does not start with '{QUALIFIERS_PREFIX}'")
-    qualifiers = [tuple(q.split('=')) for q in qualifiers[len(QUALIFIERS_PREFIX):].split(',')]
-    qualifiers = dict(qualifiers)
-    return qualifiers
 
 
 class Injector:
@@ -180,13 +50,14 @@ class Injector:
     def _parse_inject(cls, parameter: Parameter) -> tuple[type, dict[str, str]]:
         args = get_args(parameter.annotation)
         target = args[0]
-        qual = Qualifiers()
+        qual = None
         for q in args[1:]:
             if isinstance(q, Qualifiers):
                 qual = q
                 break
-        #q = args[2] if len(args) >= 3 else Qualifiers()
-        return target, qual
+        if qual is None:
+            qual = Qualifiers()
+        return (Component(target, qual), )
 
     def __init__(self, injection_point: Callable, /):
         self._parameters = [p for p in signature(injection_point).parameters.values()]
@@ -197,7 +68,7 @@ class Injector:
     def injected_params(self):
         return set(p.name for p in self._injects.keys())
 
-    def inject_args(self, context: Context, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[Tuple[Any], Dict[str, Any]]:
+    def inject_args(self, context: Container, args: Tuple[Any], kwargs: Dict[str, Any]) -> Tuple[Tuple[Any], Dict[str, Any]]:
         kwargs = kwargs.copy()
         param_idx = 0
         arg_idx = 0
@@ -277,3 +148,40 @@ class Injector:
         assert len(kwargs) == 0
 
         return tuple(merged_args), merged_kwargs
+
+
+class InjectionPoint(object):
+
+    def __init__(self, func):
+        self._name = func.__qualname__
+        self._func = func
+
+    @property
+    def func(self):
+        return self._func
+
+    @property
+    def name(self):
+        return self._name
+
+
+T = TypeVar("T")
+
+
+class InjectionParameter(Generic[T]):
+
+    def __init__(self, injection_point: InjectionPoint, parameter: Parameter, target: type[T], qualifiers: Qualifiers):
+        self._injection_point = injection_point
+        self._parameter = parameter
+        self._target = target
+        self._qualifiers = qualifiers
+        self._name = injection_point.name + ':' + parameter.name
+
+    @property
+    def injection_point(self):
+        return self._injection_point
+
+    @property
+    def name(self):
+        return self._name
+

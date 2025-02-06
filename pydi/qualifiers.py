@@ -1,8 +1,14 @@
 
 
 class Qualifiers(object):
+    DEFAULT: str = 'default'
+    ANY: str = 'any'
 
     def __init__(self, *args: str, **kwargs: str):
+        if len(args) == 0 and len(kwargs) == 0:
+            args = (self.DEFAULT, self.ANY)
+        if self.ANY not in args:
+            args += (self.ANY,)
         self._args: tuple[str, ...] = tuple(sorted(args))
         self._kwargs: dict[str, str] = kwargs
         self._sorted_kwargs: tuple[tuple[str, str], ...] = tuple((k, v) for (k, v) in sorted(kwargs.items()))
