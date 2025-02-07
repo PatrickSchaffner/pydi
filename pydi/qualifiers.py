@@ -22,8 +22,9 @@ class Qualifiers(object):
 
     def __init__(self, *tags: str, **params: str):
         tags = set(tags)
-        if any(p in tags for p in params.keys()):
-            raise ValueError(f"Qualifier tag '{p}' found in parameters.")
+        for p in tags:
+            if p in params.keys():
+                raise ValueError(f"Duplicate qualifier '{p}' found in tags and parameters.")
         self._tags: tuple[str, ...] = tuple(sorted(set(tags)))
         self._params: dict[str, str] = params
         self._sorted_params: tuple[tuple[str, str], ...] = tuple((k, v) for (k, v) in sorted(params.items()))

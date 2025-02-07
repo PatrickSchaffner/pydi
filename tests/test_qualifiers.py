@@ -6,17 +6,24 @@ from pydi.qualifiers import Qualifiers, qualifiers
 args_sample = pytest.mark.parametrize('tags, params', [
     pytest.param(tuple(), dict(), id='empty'),
     pytest.param(('default',), dict(name='named'), id='single'),
-    pytest.param(('any', 'preferred'), dict(name='named', label='str'), id='multiple'),
-    pytest.param(('qualifier',), dict(qualifier='duplicate'), id='duplicate')
+    pytest.param(('any', 'preferred', 'preferred'), dict(name='named', label='str'), id='multiple'),
 ])
 
 
 @args_sample
 def test_Qualifiers_init(tags, params):
     q = Qualifiers(*tags, **params)
-    assert q._args == tuple(sorted(tags))
-    assert q._kwargs == params
-    assert q._sorted_kwargs == tuple(sorted(params.items()))
+    assert q._tags == tuple(sorted(set(tags)))
+    assert q._params == params
+    assert q._sorted_params == tuple(sorted(params.items()))
+
+
+def test_Qualifiers_init_duplicates():
+    with pytest.raises(ValueError) as err:
+        _ = Qualifiers('duplicate', 'duplicate', duplicate='here')
+    assert type(err.value) == ValueError
+
+    assert Qualifiers('duplicate', 'duplicate') == Qualifiers('duplicate')
 
 
 @args_sample
@@ -24,6 +31,9 @@ def test_Qualifiers_equals(tags, params):
     q1 = Qualifiers(*tags, **params)
     assert q1 == q1
     assert hash(q1) == hash(q1)
+
+    qr = Qualifiers(*reversed(tags), **params)
+    assert qr == q1
 
     q2 = Qualifiers(*tags, **params)
     assert q1 == q2
@@ -59,21 +69,21 @@ def test_Qualifiers_dict(tags, params):
 
 
 @args_sample
-def test_Qualifiers_contains(tags, params):
+def test_Qualifiers_is_superset(tags, params):
     q = Qualifiers(*tags, **params)
-    assert q.contain(q)
+    assert q.is_superset(q)
 
-    q1 = Qualifiers('default', *tags, **params)
-    assert q1.contain(q)
-    assert not q.contain(q1)
+    q1 = Qualifiers('default2', *tags, **params)
+    assert q1.is_superset(q)
+    assert not q.is_superset(q1)
 
     q2 = Qualifiers('alternative', *tags, different='another', **params)
-    assert q2.contain(q)
-    assert not q.contain(q2)
-    assert not q1.contain(q2)
-    assert not q2.contain(q1)
+    assert q2.is_superset(q)
+    assert not q.is_superset(q2)
+    assert not q1.is_superset(q2)
+    assert not q2.is_superset(q1)
 
 
 @args_sample
 def test_qualifiers(tags, params):
-    assert qualifiers(*tags, **params) == Qualifiers(*tags, **params)
+    assert qualifiers(*tags, **params) == Qualifiers.for_injector(*tags, **params)
