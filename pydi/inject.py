@@ -1,11 +1,7 @@
 from inspect import Parameter
-from typing import Annotated, TypeVar, Generic
-
+from typing import TypeVar, Generic
 
 from .qualifiers import Qualifiers
-
-
-Inject = Annotated[TypeVar('T'), Qualifiers('default', 'any')]
 
 
 class InjectionPoint(object):
