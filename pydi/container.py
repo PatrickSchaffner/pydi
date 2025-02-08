@@ -59,11 +59,11 @@ class Container(InjectionContext):
             raise ValueError('Cannot specify qualifiers for inject decorator.')
 
         def _decorator(func):
-            injector = Injector(func, self)
+            injector = Injector(func)
 
-            @wraps(func, remove_args=injector.injected_params)
+            @wraps(func, remove_args=injector.parameters)
             def _wrapper(*args, **kwargs):
-                args, kwargs = injector.inject_args(args, kwargs)
+                args, kwargs = injector.inject(self, args, kwargs)
                 return func(*args, **kwargs)
 
             return _wrapper

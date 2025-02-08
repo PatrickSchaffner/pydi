@@ -47,7 +47,7 @@ def func(x: Inject[int],
 @singleton()
 @inject()
 def calculate_f_using_func(func: Inject[Callable[[int, float, float], float]]) -> float:
-    return func(1, w=1, v=1)
+    return func(1, v=1)
 
 
 @provides()
