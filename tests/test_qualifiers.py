@@ -1,12 +1,15 @@
 import pytest
 
-from pydi.qualifiers import Qualifiers, qualifiers
+from pydi.qualifiers import Qualifiers, qualifiers, ANY, DEFAULT, ALTERNATIVE
 
 
 args_sample = pytest.mark.parametrize('tags, params', [
     pytest.param(tuple(), dict(), id='empty'),
-    pytest.param(('default',), dict(name='named'), id='single'),
-    pytest.param(('any', 'preferred', 'preferred'), dict(name='named', label='str'), id='multiple'),
+    pytest.param((DEFAULT,), dict(), id='default'),
+    pytest.param((ALTERNATIVE,), dict(), id='tag'),
+    pytest.param(tuple(), dict(name='named'), id='parameter'),
+    pytest.param((DEFAULT,), dict(name='named'), id='both'),
+    pytest.param((ANY, 'preferred', 'preferred'), dict(name='named', label='str'), id='multiple'),
 ])
 
 
