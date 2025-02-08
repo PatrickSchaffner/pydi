@@ -3,12 +3,17 @@ from inspect import signature
 
 from makefun import wraps
 
+from .core import DependencyInjectionException
 from .qualifiers import Qualifiers, NAME
 from .component import Component, T
 from .injection import InjectionContext, Injector
 
 
 Inject = Annotated[TypeVar('T'), Qualifiers('default')]
+
+
+class ResolutionException(DependencyInjectionException):
+    pass
 
 
 class Container(InjectionContext):
@@ -21,15 +26,15 @@ class Container(InjectionContext):
     def name(self) -> str:
         return self._name
 
-    def provides(self, target: type | None = None, *flags: str, function: bool = False, **params: str):
+    def provides(self, target: type[T] | None = None, *flags: str, function: bool = False, **params: str):
         if target is not None and isinstance(target, str):
             flags = (target, *flags)
             target = None
         qualifiers = Qualifiers.for_provider(*flags, **params)
 
-        def _decorator(func):
+        def _decorator(func: Callable[[], T]):
             nonlocal target
-            provider: Callable[[], Any]
+            provider: Callable[[], T]
             if function:
                 if target is None:
                     sig = signature(func)
@@ -41,7 +46,7 @@ class Container(InjectionContext):
                 if target is None:
                     target = signature(func).return_annotation
                 provider = func
-            component = Component(target, qualifiers)
+            component = Component[T](target, qualifiers)
             self.register(component, provider)
             return func
 
@@ -72,7 +77,7 @@ class Container(InjectionContext):
 
     def register(self, component: Component[T], provider: Callable[[], T]) -> None:
         if component in self._providers:
-            raise ValueError(f"Cannot register multiple providers for '{component}'.")
+            raise ResolutionException(f"Cannot register multiple providers for '{component}'.")
         self._providers[component] = provider
 
     def resolve(self, request: Component[T], *, many: bool = False, named: bool = False) -> T | tuple[T, ...] | dict[str, T]:
@@ -87,7 +92,7 @@ class Container(InjectionContext):
         elif named:
             raise ValueError("Parameter 'named=True' can only be used with 'many=True'.")
         elif len(components) == 0:
-            raise ValueError(f'Cannot resolve dependency {request}.')
+            raise ResolutionException(f'Cannot resolve dependency {request}.')
         elif len(components) > 1:
-            raise ValueError(f'Dependency resolution for {request} is ambiguous: {" | ".join(str(c) for c in components)}')
+            raise ResolutionException(f'Dependency resolution for {request} is ambiguous: {" | ".join(str(c) for c in components)}')
         return self._providers[components[0]]()

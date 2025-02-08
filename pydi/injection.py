@@ -2,11 +2,12 @@ from abc import ABC, abstractmethod
 from inspect import signature, Parameter
 from typing import get_args, Callable, Tuple, Any, Dict, Sequence
 
+from .core import DependencyInjectionException
 from .component import Component, T
 from .qualifiers import Qualifiers
 
 
-class InjectionException(Exception):
+class InjectionException(DependencyInjectionException):
     pass
 
 

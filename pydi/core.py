@@ -1,0 +1,4 @@
+
+
+class DependencyInjectionException(Exception):
+    pass
