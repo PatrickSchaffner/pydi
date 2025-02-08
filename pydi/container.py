@@ -63,7 +63,7 @@ class Container(InjectionContext):
 
             @wraps(func, remove_args=injector.parameters)
             def _wrapper(*args, **kwargs):
-                args, kwargs = injector.inject(self, args, kwargs)
+                args, kwargs = injector(self, args, kwargs)
                 return func(*args, **kwargs)
 
             return _wrapper

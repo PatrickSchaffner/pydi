@@ -6,6 +6,10 @@ from .component import Component, T
 from .qualifiers import Qualifiers
 
 
+class InjectionException(Exception):
+    pass
+
+
 class InjectionContext(ABC):
 
     @abstractmethod
@@ -41,11 +45,11 @@ class Injector:
     def parameters(self):
         return set(p.name for p in self._components.keys())
 
-    def inject(self,
-               context: InjectionContext,
-               args: Tuple[Any, ...],
-               kwargs: Dict[str, Any],
-               ) -> Tuple[Tuple[Any], Dict[str, Any]]:
+    def __call__(self,
+                 context: InjectionContext,
+                 args: Tuple[Any, ...],
+                 kwargs: Dict[str, Any],
+                 ) -> Tuple[Tuple[Any], Dict[str, Any]]:
         kwargs = kwargs.copy()
         param_idx = 0
         arg_idx = 0
@@ -54,6 +58,7 @@ class Injector:
         merged_kwargs = dict()
 
         def _init_next_param(kind) -> bool:
+            """Initializes param according to param_idx, if it is of the specified kind."""
             if param_idx >= len(self._parameters):
                 return False
             if not isinstance(kind, set):
@@ -65,52 +70,46 @@ class Injector:
             return True
 
         def _resolve_param(**resolve_kwargs):
+            """Resolves param using its component and the injection context."""
             return context.resolve(self._components[param], **resolve_kwargs)
 
-        # Fill positional-only parameters.
-        while _init_next_param(Parameter.POSITIONAL_ONLY):
+        # Fill positional parameters.
+        while _init_next_param({Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD}):
             if param in self._components:
                 value = _resolve_param()
             elif arg_idx >= len(args):
-                raise ValueError("Not enough positional arguments.")
-            else:
-                value = args[arg_idx]
-                arg_idx += 1
-            merged_args.append(value)
-            param_idx += 1
-
-        # Fill positional-or-keyword parameters being used as positionals.
-        while _init_next_param(Parameter.POSITIONAL_OR_KEYWORD):
-            if param in self._components:
-                value = _resolve_param()
-            elif arg_idx >= len(args):
-                break
+                if param.kind == Parameter.POSITIONAL_ONLY:
+                    raise InjectionException("Not enough positional arguments.")
+                else:
+                    break  # The current and further parameters are specified as keywords.
             elif param.name in kwargs:
-                raise ValueError("Cannot provide argument twice.")
+                raise InjectionException("Cannot provide argument twice.")
             else:
                 value = args[arg_idx]
                 arg_idx += 1
             merged_args.append(value)
             param_idx += 1
 
-        # Fill variable-length positional parameters.
-        while _init_next_param(Parameter.VAR_POSITIONAL):
+        # Fill variable-length positional parameter.
+        if _init_next_param(Parameter.VAR_POSITIONAL):
             if param in self._components:
                 values = _resolve_param(many=True)
+            elif param.name in kwargs:
+                raise InjectionException("Cannot provide argument twice.")
             else:
-                values = args[arg_idx:]
+                values = args[arg_idx:]  # All remaining positionals, may be empty.
                 arg_idx += len(values)
             merged_args.extend(values)
             param_idx += 1
 
-        assert arg_idx == len(args)
+        assert arg_idx == len(args)  # All provided positional arguments were used.
 
-        # Fill positional-or-keyword parameters being used as keywords, and keyword-only parameters.
+        # Fill keyword parameters.
         while _init_next_param({Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY}):
             resolve = param in self._components
             in_kwargs = param.name in kwargs
             if resolve and in_kwargs:
-                raise ValueError("Cannot provide argument twice.")
+                raise InjectionException("Cannot provide argument twice.")
             elif resolve:
                 value = _resolve_param()
             elif in_kwargs:
@@ -120,8 +119,8 @@ class Injector:
                 merged_kwargs[param.name] = value
             param_idx += 1
 
-        # Fill variable-length keyword parameters.
-        while _init_next_param(Parameter.VAR_KEYWORD):
+        # Fill variable-length keyword parameter.
+        if _init_next_param(Parameter.VAR_KEYWORD):
             resolve = param in self._components
             values = _resolve_param(many=True, named=True) if resolve else kwargs
             merged_kwargs.update(values)
@@ -129,7 +128,7 @@ class Injector:
                 kwargs.clear()
             param_idx += 1
 
-        assert len(kwargs) == 0
-        assert param_idx == len(self._parameters)
+        assert len(kwargs) == 0  # All provided kwargs were used.
+        assert param_idx == len(self._parameters)  # All parameters in method signature were processed.
 
         return tuple(merged_args), merged_kwargs
