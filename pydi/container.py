@@ -1,26 +1,23 @@
-from typing import Callable, Any, Annotated, TypeVar
+from typing import Callable, Annotated, TypeVar
 from inspect import signature
 
 from makefun import wraps
 
-from .core import DependencyInjectionException
-from .qualifiers import Qualifiers, NAME
+from .qualifiers import Qualifiers
 from .component import Component, T
 from .injection import InjectionContext, Injector
+from .registry import DictRegistry
 
 
 Inject = Annotated[TypeVar('T'), Qualifiers('default')]
-
-
-class ResolutionException(DependencyInjectionException):
-    pass
 
 
 class Container(InjectionContext):
 
     def __init__(self, name: str):
         self._name = name
-        self._providers: dict[type, Callable[[], Any]] = dict()
+        self._registry = DictRegistry()
+        super(Container, self).__init__()
 
     @property
     def name(self) -> str:
@@ -47,7 +44,7 @@ class Container(InjectionContext):
                     target = signature(func).return_annotation
                 provider = func
             component = Component[T](target, qualifiers)
-            self.register(component, provider)
+            self._registry.register(component, provider)
             return func
 
         return _decorator
@@ -75,24 +72,27 @@ class Container(InjectionContext):
 
         return _decorator
 
-    def register(self, component: Component[T], provider: Callable[[], T]) -> None:
-        if component in self._providers:
-            raise ResolutionException(f"Cannot register multiple providers for '{component}'.")
-        self._providers[component] = provider
+    def resolve(self, request: Component[T], **kwargs) -> T:
+        return self._registry.resolve(request, **kwargs)
 
-    def resolve(self, request: Component[T], *, many: bool = False, named: bool = False) -> T | tuple[T, ...] | dict[str, T]:
-        components = [comp for comp in self._providers.keys() if comp.satisfies(request)]
-        if many:
-            if named:
-                instances = {comp.qualifiers[NAME]: self._providers[comp]()
-                             for comp in components if NAME in comp.qualifiers}
-            else:
-                instances = (self._providers[comp]() for comp in components)
-            return instances
-        elif named:
-            raise ValueError("Parameter 'named=True' can only be used with 'many=True'.")
-        elif len(components) == 0:
-            raise ResolutionException(f'Cannot resolve dependency {request}.')
-        elif len(components) > 1:
-            raise ResolutionException(f'Dependency resolution for {request} is ambiguous: {" | ".join(str(c) for c in components)}')
-        return self._providers[components[0]]()
+
+class ContainerMeta(type):
+    def __new__(mcs, name, bases, attrs):
+        container = Container(name)
+        attrs['_container'] = container
+        attrs['provides'] = container.provides
+        attrs['inject'] = container.inject
+        return super(ContainerMeta, mcs).__new__(mcs, name, bases, attrs)
+
+
+class DeclarativeContainer(metaclass=ContainerMeta):
+
+    _container = None
+
+    @classmethod
+    def provides(cls, *args, **kwargs):
+        pass
+
+    @classmethod
+    def inject(cls, *args, **kwargs):
+        pass

@@ -4,9 +4,30 @@ from pathlib import Path, WindowsPath
 from pydi import Container, singleton, Inject
 from pydi.qualifiers import qualifiers as q, ANY, ALTERNATIVE
 
+from pydi.container import DeclarativeContainer
+
+
+class ExampleContainer(DeclarativeContainer):
+    pass
+
+
 container = Container(__name__)
+internal = Container(__name__+'_internal')
+
 provides = container.provides
 inject = container.inject
+
+"""
+a = Container('a')
+
+b = Container('b')
+a.veto(Callable[[int, float, float], float], q('default'))
+b.requires_from(a, int)
+b.requires_from(a, Path, name='home')
+b.requires_from(a, [(Path, q(name='home')), int])
+b.exposes_to(a, Callable[[int, float, float], float], override=True)
+b.shares_with(a, float)
+"""
 
 
 @provides()
