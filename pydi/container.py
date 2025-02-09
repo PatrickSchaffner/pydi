@@ -24,6 +24,10 @@ class Container(InjectionContext):
     def name(self) -> str:
         return self._name
 
+    @property
+    def registry(self) -> str:
+        return self._registry
+
     def provides(self, target: type[T] | None = None, *flags: str, function: bool = False, **params: str):
         if target is not None and isinstance(target, str):
             flags = (target, *flags)
@@ -45,7 +49,7 @@ class Container(InjectionContext):
                     target = signature(func).return_annotation
                 provider = func
             component = Component[T](target, qualifiers)
-            self._registry.register(component, provider)
+            self.registry.register(component, provider)
             return func
 
         return _decorator
@@ -73,19 +77,12 @@ class Container(InjectionContext):
 
         return _decorator
 
-    def resolve(self, request: Component[T], *, many: bool = False, named: bool = False,
-                constraint: Constraint = Unconstrained,
-                _resolve_stack: set['Container'] = set(),
-                ) -> T:
-        _resolve_stack = _resolve_stack.union({self})
+    def resolve(self, request: Component[T], *, many: bool = False, named: bool = False, constraint: Constraint = Unconstrained) -> T:
         if many:
-            instances = self._registry.resolve(request, many=True, named=named, constraint=constraint)
+            instances = self.registry.resolve(request, many=True, named=named, constraint=constraint)
             for (container, container_constraint) in self._dependencies.items():
-                if container in _resolve_stack:
-                    continue
-                dependencies = container.resolve(request, many=True, named=named,
-                                                 constraint=lambda c: constraint(c) and container_constraint(c),
-                                                 _resolve_stack=_resolve_stack)
+                dependencies = container.registry.resolve(request, many=True, named=named,
+                                                          constraint=lambda c: constraint(c) and container_constraint(c))
                 if named:
                     duplicates = set(instances.keys()).intersection(set(dependencies.keys()))
                     if len(duplicates):
@@ -99,17 +96,14 @@ class Container(InjectionContext):
         instance = None
         origin = None
         try:
-            instance = self._registry.resolve(request, many=False, named=False, constraint=constraint)
+            instance = self.registry.resolve(request, many=False, named=False, constraint=constraint)
             origin = self
         except UnsatisfiedDependencyException:
             pass
         for (container, container_constraints) in self._dependencies.items():
-            if container in _resolve_stack:
-                continue
             try:
-                instance = container.resolve(request, many=False, named=False,
-                                             constraint=lambda c: constraint(c) and container_constraints(c),
-                                             _resolve_stack=_resolve_stack)
+                instance = container.registry.resolve(request, many=False, named=False,
+                                                      constraint=lambda c: constraint(c) and container_constraints(c))
                 if origin is not None:
                     raise AmbiguousDependencyException(f"Ambiguous dependency {request} received from containers {origin.name} and {container.name}.")
                 origin = container
@@ -130,31 +124,7 @@ class Container(InjectionContext):
         else:
             other_constraints = self._dependencies[other]
             self._dependencies[other] = lambda c: other_constraints(c) or constraint(c)
-        #for (component, factory) in other._registry.lookup(request).items():  # TODO: Delay to resolve phase.
-        #    self._registry.register(component, factory)
 
     def share_with(self, other: 'Container', target: type[T], *tags: str, **params: str) -> None:
         self.require_from(other, target, *    tags, **params)
         self.expose_to(other, target, *tags, **params)
-
-
-class ContainerMeta(type):
-    def __new__(mcs, name, bases, attrs):
-        container = Container(name)
-        attrs['_container'] = container
-        attrs['provides'] = container.provides
-        attrs['inject'] = container.inject
-        return super(ContainerMeta, mcs).__new__(mcs, name, bases, attrs)
-
-
-class DeclarativeContainer(metaclass=ContainerMeta):
-
-    _container = None
-
-    @classmethod
-    def provides(cls, *args, **kwargs):
-        pass
-
-    @classmethod
-    def inject(cls, *args, **kwargs):
-        pass

@@ -10,8 +10,10 @@ from .injection import InjectionContext
 class ResolutionException(DependencyInjectionException):
     pass
 
+
 class AmbiguousDependencyException(ResolutionException):
     pass
+
 
 class UnsatisfiedDependencyException(ResolutionException):
     pass

@@ -1,14 +1,8 @@
 from typing import Annotated, Callable
 from pathlib import Path, WindowsPath
 
-from pydi import Container, singleton, Inject
-from pydi.qualifiers import qualifiers as q, ANY, ALTERNATIVE
-
-from pydi.container import DeclarativeContainer
-
-
-class ExampleContainer(DeclarativeContainer):
-    pass
+from pydi import Container, singleton, Inject, qualifiers as q
+from pydi.qualifiers import ANY, ALTERNATIVE
 
 
 container = Container(__name__)
@@ -87,8 +81,5 @@ def main(h: Inject[Path],
     print(vfloats)
 
 
-
-
 if __name__ == '__main__':
     main()
-
