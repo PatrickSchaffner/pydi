@@ -45,3 +45,5 @@ def main(a: Inject[A]) -> None:
 
 if __name__ == '__main__':
     main()
+    x = create_B()
+    print(x)

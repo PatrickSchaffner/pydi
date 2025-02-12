@@ -71,6 +71,7 @@ class Container(InjectionContext):
         class _ProviderDescriptor:
 
             def __init__(self, provider: Callable[[], T]):
+                wraps(provider)(self)
                 self._provider = provider
 
                 n_params: int = len(inspect.signature(provider).parameters)
